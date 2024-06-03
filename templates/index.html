@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Chat App</title>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='css/style.css') }}"
+    />
+    <script
+      src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"
+      integrity="sha512-q/dWJ3kcmjBLU4Qc47E4A9kTB4m3wuTY7vkFJDTZKjTs8jhyGQnaUrxa0Ytd0ssMZhbNua9hE+E7Qv1j+DyZwA=="
+      crossorigin="anonymous"
+    ></script>
+  </head>
+  <body>
+    <div id="app">
+      <div id="home" class="view">
+        <form id="home-form" class="buttons">
+          <h3>Enter The Chat Room</h3>
+          <div>
+            <label>Name:</label>
+            <input
+              type="text"
+              placeholder="Pick a name!"
+              name="name"
+              id="name-input"
+            />
+          </div>
+          <div class="join">
+            <input
+              type="text"
+              placeholder="Room Code"
+              name="code"
+              id="code-input"
+            />
+            <button type="submit" name="join" id="join-btn">Join a Room</button>
+          </div>
+          <button
+            type="button"
+            name="create"
+            id="create-btn"
+            class="create-btn"
+          >
+            Create a Room
+          </button>
+          <div class="public-room-container">
+            <label for="public" class="public-room-label">Public room:</label>
+            <input
+              type="checkbox"
+              id="public"
+              name="public"
+              class="public-room-checkbox"
+            />
+          </div>
+          <ul id="error-list"></ul>
+        </form>
+        <h2>Available Public Rooms:</h2>
+        <ul id="public-room-list">
+          {% for room in public_room_list %}
+          <li class="room-info">
+            Room Code: <span class="room-code">{{ room.code }}</span> | Created
+            by: <span class="creator">{{ room.creator }}</span>
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+
+      <div id="room" class="view" style="display: none">
+        <div class="message-box">
+          <h2>Chat box: <span id="room-code"></span></h2>
+          <div class="messages" id="messages"></div>
+          <div class="inputs">
+            <input
+              type="text"
+              rows="3"
+              placeholder="Message"
+              name="message"
+              id="message-input"
+            />
+            <button
+              type="button"
+              name="send"
+              id="send-btn"
+              onClick="sendMessage()"
+            >
+              Send
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script type="text/javascript">
+      <script type="text/javascript">
+          const socketio = io();
+          const app = document.getElementById('app');
+          const homeView = document.getElementById('home');
+          const roomView = document.getElementById('room');
+          const errorList = document.getElementById('error-list');
+          const messagesDiv = document.getElementById('messages');
+          const roomCodeSpan = document.getElementById('room-code');
+
+          document.getElementById('home-form').addEventListener('submit', function (event) {
+              event.preventDefault();
+              joinRoom();
+          });
+
+          document.getElementById('create-btn').addEventListener('click', function () {
+              createRoom();
+          });
+
+          function showView(view) {
+              homeView.style.display = view === 'home' ? 'block' : 'none';
+              roomView.style.display = view === 'room' ? 'block' : 'none';
+          }
+
+          function joinRoom() {
+              const name = document.getElementById('name-input').value;
+              const code = document.getElementById('code-input').value;
+
+              if (!name) {
+                  showError('Please enter a name.');
+                  return;
+              }
+              if (!code) {
+                  showError('Please enter a room code.');
+                  return;
+              }
+
+              socketio.emit('join', { name, code }, (response) => {
+                  if (response.error) {
+                      showError(response.error);
+                  } else {
+                      sessionStorage.setItem('room', code);
+                      sessionStorage.setItem('name', name);
+                      roomCodeSpan.textContent = code;
+                      showView('room');
+                  }
+              });
+          }
+
+          function createRoom() {
+              const name = document.getElementById('name-input').value;
+              const public = document.getElementById('public').checked;
+
+              if (!name) {
+                  showError('Please enter a name.');
+                  return;
+              }
+
+              socketio.emit('create', { name, public }, (response) => {
+                  if (response.error) {
+                      showError(response.error);
+                  } else {
+                      sessionStorage.setItem('room', response.room);
+                      sessionStorage.setItem('name', name);
+                      roomCodeSpan.textContent = response.room;
+                      showView('room');
+                  }
+              });
+          }
+
+          function showError(message) {
+              errorList.innerHTML = `<li>${message}</li>`;
+          }
+
+          function sendMessage() {
+              const messageInput = document.getElementById('message-input');
+              const message = messageInput.value;
+
+              if (message === '') return;
+
+              socketio.emit('message', { data: message });
+              messageInput.value = '';
+          }
+
+          socketio.on('message', (data) => {
+              const content = `
+                  <div class="text">
+                      <span><strong>${data.name}</strong>: ${data.message}</span>
+                      <span class="muted">${new Date().toLocaleString()}</span>
+                  </div>
+              `;
+              messagesDiv.innerHTML += content;
+          });
+
+          socketio.on('connect', () => {
+              const room = sessionStorage.getItem('room');
+              const name = sessionStorage.getItem('name');
+
+              if (room && name) {
+                  socketio.emit('join', { name, code: room });
+              }
+          });
+
+          showView('home');
+    </script>
+  </body>
+</html>
